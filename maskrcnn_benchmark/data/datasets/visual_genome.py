@@ -14,11 +14,24 @@ from maskrcnn_benchmark.structures.boxlist_ops import boxlist_iou
 
 BOX_SCALE = 1024  # Scale at which we have the boxes
 
+def update_indices(index_array, indices, dimension, na=-1, sort=True):
+        # update a scalar index array so that specified indices are replaced
+        # with new consecutive indices, while replacing other indices with a
+        # value
+    if sort:
+        indices = sorted(indices)
+            # without sorting, the order of the elements of indices matters
+            # and may produce an unexpected result
+    old_to_new = np.full((dimension,), na)
+    old_to_new[indices] = np.arange(len(indices))
+    return old_to_new[index_array]
+
 class VGDataset(torch.utils.data.Dataset):
 
     def __init__(self, split, img_dir, roidb_file, dict_file, image_file, transforms=None,
                 filter_empty_rels=True, num_im=-1, num_val_im=5000,
-                filter_duplicate_rels=True, filter_non_overlap=True, flip_aug=False, custom_eval=False, custom_path=''):
+                filter_duplicate_rels=True, filter_non_overlap=True, flip_aug=False, custom_eval=False, custom_path='',
+                unknown=False, missing=False):
         """
         Torch dataset for VisualGenome
         Parameters:
@@ -60,11 +73,21 @@ class VGDataset(torch.utils.data.Dataset):
                 self.roidb_file, self.split, num_im, num_val_im=num_val_im,
                 filter_empty_rels=filter_empty_rels,
                 filter_non_overlap=self.filter_non_overlap,
+                unknown=unknown, missing=missing, categories=self.categories,
             )
 
             self.filenames, self.img_info = load_image_filenames(img_dir, image_file) # length equals to split_mask
             self.filenames = [self.filenames[i] for i in np.where(self.split_mask)[0]]
             self.img_info = [self.img_info[i] for i in np.where(self.split_mask)[0]]
+
+        # remove the unknown and missing classes if excluded from the data
+        classes_to_ind = {k: i for i, k in self.categories.items()}
+        for k, b in ('__unknown__', unknown), ('__missing__', missing):
+            if not b:
+                classes_to_ind.pop(k, None) # remove the key if it exists
+        self.ind_to_classes = sorted(classes_to_ind,
+                key=lambda k: classes_to_ind[k])
+        self.categories = {i: k for i, k in enumerate(self.ind_to_classes)}
 
 
     def __getitem__(self, index):
@@ -266,17 +289,20 @@ def load_info(dict_file, add_bg=True):
     Loads the file containing the visual genome label meanings
     """
     info = json.load(open(dict_file, 'r'))
+    attr = 'attribute_to_idx' in info # attribute class info is available
     if add_bg:
         info['label_to_idx']['__background__'] = 0
         info['predicate_to_idx']['__background__'] = 0
-        info['attribute_to_idx']['__background__'] = 0
+        if attr:
+            info['attribute_to_idx']['__background__'] = 0
 
     class_to_ind = info['label_to_idx']
     predicate_to_ind = info['predicate_to_idx']
-    attribute_to_ind = info['attribute_to_idx']
+    if attr:
+        attribute_to_ind = info['attribute_to_idx']
     ind_to_classes = sorted(class_to_ind, key=lambda k: class_to_ind[k])
     ind_to_predicates = sorted(predicate_to_ind, key=lambda k: predicate_to_ind[k])
-    ind_to_attributes = sorted(attribute_to_ind, key=lambda k: attribute_to_ind[k])
+    ind_to_attributes = sorted(attribute_to_ind, key=lambda k: attribute_to_ind[k]) if attr else None
 
     return ind_to_classes, ind_to_predicates, ind_to_attributes
 
@@ -311,7 +337,7 @@ def load_image_filenames(img_dir, image_file):
     return fns, img_info
 
 
-def load_graphs(roidb_file, split, num_im, num_val_im, filter_empty_rels, filter_non_overlap):
+def load_graphs(roidb_file, split, num_im, num_val_im, filter_empty_rels, filter_non_overlap, unknown=False, missing=False, categories={}):
     """
     Load the file containing the GT boxes and relations, as well as the dataset split
     Parameters:
@@ -354,7 +380,10 @@ def load_graphs(roidb_file, split, num_im, num_val_im, filter_empty_rels, filter
 
     # Get box information
     all_labels = roi_h5['labels'][:, 0]
-    all_attributes = roi_h5['attributes'][:, :]
+    all_attributes = roi_h5['attributes'][:, :] \
+            if 'attributes' in roi_h5.keys() \
+            else np.zeros((all_labels.shape[0], 0))
+            # assume the number of attributes per box is zero
     all_boxes = roi_h5['boxes_{}'.format(BOX_SCALE)][:]  # cx,cy,w,h
     assert np.all(all_boxes[:, :2] >= 0)  # sanity check
     assert np.all(all_boxes[:, 2:] > 0)  # no empty box
@@ -373,6 +402,20 @@ def load_graphs(roidb_file, split, num_im, num_val_im, filter_empty_rels, filter
     _relation_predicates = roi_h5['predicates'][:, 0]
     assert (im_to_first_rel.shape[0] == im_to_last_rel.shape[0])
     assert (_relations.shape[0] == _relation_predicates.shape[0])  # sanity check
+
+    # handle unknown and missing classes
+    class_to_ind = {k: i for i, k in categories.items()}
+    unknown_class = class_to_ind.get('__unknown__', -1)
+    missing_class = class_to_ind.get('__missing__', -1)
+        # -1 if each class is absent in the dataset, in which case
+        # the following filtering has no effects
+    if not unknown:
+            # replace the unknown class with the missing class
+        all_labels[all_labels == unknown_class] = missing_class
+    if not missing: # drop missing-class objects
+        valid_obj_mask = np.not_equal(all_labels, missing_class)
+        valid_rel_mask = valid_obj_mask[_relations].all(axis=1)
+            # whether each relationship has only a valid subject and object
 
     # Get everything by image.
     boxes = []
@@ -398,6 +441,38 @@ def load_graphs(roidb_file, split, num_im, num_val_im, filter_empty_rels, filter
         else:
             assert not filter_empty_rels
             rels = np.zeros((0, 3), dtype=np.int32)
+
+        if not missing:
+                # filter out missing class objects and their relationships
+            valid_obj_mask_i = valid_obj_mask[
+                    im_to_first_box[i] : im_to_last_box[i] + 1]
+            valid_rel_mask_i = valid_rel_mask[
+                    im_to_first_rel[i] : im_to_last_rel[i] + 1]
+
+            # remove missing-class objects
+            valid_obj_idx, = np.nonzero(valid_obj_mask_i)
+            boxes_i         = boxes_i        [valid_obj_idx]
+            gt_classes_i    = gt_classes_i   [valid_obj_idx]
+            gt_attributes_i = gt_attributes_i[valid_obj_idx]
+                # filter out invalid-class object boxes
+            if len(boxes_i) == 0: # no object in the image
+                split_mask[image_index[i]] = 0
+                continue # skip this image
+
+            # remove relationships with the invalid-class objects
+            valid_rel_idx, = np.where(valid_rel_mask_i)
+            rels = rels[valid_rel_idx]
+                # filter out relationship pairs with invalid-class objects
+            if filter_empty_rels and len(rels) == 0:
+                    # no relationships in the image
+                split_mask[image_index[i]] = 0
+                continue # skip this image
+
+            # update object indices to reflect the removed ones
+            rels[:, :2] = update_indices(
+                    rels[:, :2], valid_obj_idx, len(valid_obj_mask_i))
+            assert (rels[:, :2] >= 0).all() # no excluded indices
+            assert (gt_classes_i != missing_class).all()
 
         if filter_non_overlap:
             assert split == 'train'

@@ -117,6 +117,12 @@ class DatasetCatalog(object):
             "dict_file": "vg/VG-SGG-dicts-with-attri.json",
             "image_file": "vg/image_data.json",
         },
+        "VG_stanford_filtered_open": {
+            "img_dir": "vg/VG_100K",
+            "roidb_file": "vg/VG-SGG-open.h5",
+            "dict_file": "vg/VG-SGG-dicts-open.json",
+            "image_file": "vg/image_data.json",
+        },
     }
 
     @staticmethod
@@ -144,6 +150,14 @@ class DatasetCatalog(object):
                 args=args,
             )
         elif ("VG" in name) or ('GQA' in name):
+            keys = ['unknown', 'missing']
+                # suffixes of name led by a underscore; must be this order for
+                # the consistency of cache filenames etc.
+            opts = {}
+            for k in reversed(keys):
+                if name.endswith(s := '_' + k):
+                    opts[k] = True
+                    name = name[:-len(s)]
             # name should be something like VG_stanford_filtered_train
             p = name.rfind("_")
             name, split = name[:p], name[p+1:]
@@ -160,6 +174,7 @@ class DatasetCatalog(object):
             args['flip_aug'] = cfg.MODEL.FLIP_AUG
             args['custom_eval'] = cfg.TEST.CUSTUM_EVAL
             args['custom_path'] = cfg.TEST.CUSTUM_PATH
+            args.update(**opts)
             return dict(
                 factory="VGDataset",
                 args=args,

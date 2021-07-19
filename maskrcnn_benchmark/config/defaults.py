@@ -78,6 +78,8 @@ _C.DATASETS.TRAIN = ()
 _C.DATASETS.VAL = ()
 # List of the dataset names for testing, as present in paths_catalog.py
 _C.DATASETS.TEST = ()
+# Max number of images in each dataset (ignored if negative)
+_C.DATASETS.NUM_IM = -1
 
 # -----------------------------------------------------------------------------
 # DataLoader

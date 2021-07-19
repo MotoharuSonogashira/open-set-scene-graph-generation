@@ -174,6 +174,7 @@ class DatasetCatalog(object):
             args['flip_aug'] = cfg.MODEL.FLIP_AUG
             args['custom_eval'] = cfg.TEST.CUSTUM_EVAL
             args['custom_path'] = cfg.TEST.CUSTUM_PATH
+            args['num_im'] = cfg.DATASETS.NUM_IM
             args.update(**opts)
             return dict(
                 factory="VGDataset",

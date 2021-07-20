@@ -5,7 +5,9 @@ _ext
 *.so
 maskrcnn_benchmark.egg-info/
 build/
+output/
 dist/
+apex/
 
 # ipython/jupyter notebooks
 #*.ipynb
@@ -21,9 +23,7 @@ datasets/vg/
 *.jpeg
 
 # Editor temporaries
-*.swn
-*.swo
-*.swp
+*.sw?
 *~
 
 # Pycharm editor settings

@@ -73,7 +73,11 @@ def main():
 
     output_dir = cfg.OUTPUT_DIR
     checkpointer = DetectronCheckpointer(cfg, model, save_dir=output_dir)
-    _ = checkpointer.load(cfg.MODEL.WEIGHT)
+    if cfg.MODEL.PRETRAINED_DETECTOR_CKPT != '':
+        _ = checkpointer.load(cfg.MODEL.PRETRAINED_DETECTOR_CKPT,
+                ignore_last_checkpoint=True)
+    else:
+        _ = checkpointer.load(cfg.MODEL.WEIGHT)
 
     iou_types = ("bbox",)
     if cfg.MODEL.MASK_ON:
@@ -86,9 +90,9 @@ def main():
         iou_types = iou_types + ("attributes", )
     output_folders = [None] * len(cfg.DATASETS.TEST)
     dataset_names = cfg.DATASETS.TEST
-    if cfg.OUTPUT_DIR:
+    if cfg.TEST_OUTPUT_DIR or cfg.OUTPUT_DIR:
         for idx, dataset_name in enumerate(dataset_names):
-            output_folder = os.path.join(cfg.OUTPUT_DIR, "inference", dataset_name)
+            output_folder = os.path.join(cfg.TEST_OUTPUT_DIR or cfg.OUTPUT_DIR, "inference", dataset_name)
             mkdir(output_folder)
             output_folders[idx] = output_folder
     data_loaders_val = make_data_loader(cfg, mode="test", is_distributed=distributed)

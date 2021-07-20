@@ -590,7 +590,7 @@ _C.TEST.CUSTUM_PATH = '.'
 # Misc options
 # ---------------------------------------------------------------------------- #
 _C.OUTPUT_DIR = "."
-_C.TEST_OUTPUT_DIR = "."
+_C.TEST_OUTPUT_DIR = None
 _C.DETECTED_SGG_DIR = "."
 _C.GLOVE_DIR = "."
 

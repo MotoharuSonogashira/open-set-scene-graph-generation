@@ -80,6 +80,11 @@ _C.DATASETS.VAL = ()
 _C.DATASETS.TEST = ()
 # Max number of images in each dataset (ignored if negative)
 _C.DATASETS.NUM_IM = -1
+# Number of images in val dataset (ignored to use the input split if negative)
+_C.DATASETS.NUM_VAL_IM = 5000
+# Use the validation image set in the input dataset to the training set
+# (otherwise the validation set is merged to the training set)
+_C.DATASETS.INPUT_VAL = False
 
 # -----------------------------------------------------------------------------
 # DataLoader
@@ -585,6 +590,7 @@ _C.TEST.CUSTUM_PATH = '.'
 # Misc options
 # ---------------------------------------------------------------------------- #
 _C.OUTPUT_DIR = "."
+_C.TEST_OUTPUT_DIR = "."
 _C.DETECTED_SGG_DIR = "."
 _C.GLOVE_DIR = "."
 

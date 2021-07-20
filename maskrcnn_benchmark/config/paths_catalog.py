@@ -175,6 +175,8 @@ class DatasetCatalog(object):
             args['custom_eval'] = cfg.TEST.CUSTUM_EVAL
             args['custom_path'] = cfg.TEST.CUSTUM_PATH
             args['num_im'] = cfg.DATASETS.NUM_IM
+            args['num_val_im'] = cfg.DATASETS.NUM_VAL_IM
+            args['input_val'] = cfg.DATASETS.INPUT_VAL
             args.update(**opts)
             return dict(
                 factory="VGDataset",

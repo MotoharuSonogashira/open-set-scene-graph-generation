@@ -30,8 +30,9 @@ class VGDataset(torch.utils.data.Dataset):
 
     def __init__(self, split, img_dir, roidb_file, dict_file, image_file, transforms=None,
                 filter_empty_rels=True, num_im=-1, num_val_im=5000,
-                filter_duplicate_rels=True, filter_non_overlap=True, flip_aug=False, custom_eval=False, custom_path='',
-                unknown=False, missing=False):
+                filter_duplicate_rels=True, filter_non_overlap=True,
+                flip_aug=False, custom_eval=False, custom_path='',
+                input_val=False, unknown=False, missing=False):
         """
         Torch dataset for VisualGenome
         Parameters:
@@ -70,7 +71,8 @@ class VGDataset(torch.utils.data.Dataset):
             self.get_custom_imgs(custom_path)
         else:
             self.split_mask, self.gt_boxes, self.gt_classes, self.gt_attributes, self.relationships = load_graphs(
-                self.roidb_file, self.split, num_im, num_val_im=num_val_im,
+                self.roidb_file, self.split,
+                num_im, num_val_im=num_val_im, input_val=input_val,
                 filter_empty_rels=filter_empty_rels,
                 filter_non_overlap=self.filter_non_overlap,
                 unknown=unknown, missing=missing, categories=self.categories,
@@ -205,7 +207,7 @@ class VGDataset(torch.utils.data.Dataset):
 
 def get_VG_statistics(img_dir, roidb_file, dict_file, image_file, must_overlap=True):
     train_data = VGDataset(split='train', img_dir=img_dir, roidb_file=roidb_file, 
-                        dict_file=dict_file, image_file=image_file, num_val_im=5000, 
+                        dict_file=dict_file, image_file=image_file,
                         filter_duplicate_rels=False)
     num_obj_classes = len(train_data.ind_to_classes)
     num_rel_classes = len(train_data.ind_to_predicates)
@@ -337,7 +339,9 @@ def load_image_filenames(img_dir, image_file):
     return fns, img_info
 
 
-def load_graphs(roidb_file, split, num_im, num_val_im, filter_empty_rels, filter_non_overlap, unknown=False, missing=False, categories={}):
+def load_graphs(roidb_file, split, num_im, num_val_im,
+        filter_empty_rels, filter_non_overlap,
+        input_val=False, unknown=False, missing=False, categories={}):
     """
     Load the file containing the GT boxes and relations, as well as the dataset split
     Parameters:
@@ -357,7 +361,11 @@ def load_graphs(roidb_file, split, num_im, num_val_im, filter_empty_rels, filter
     """
     roi_h5 = h5py.File(roidb_file, 'r')
     data_split = roi_h5['split'][:]
-    split_flag = 2 if split == 'test' else 0
+    if not input_val:
+        data_split[data_split == 1] = 0 # merge val to train
+    split_flag = 2 if split == 'test'                   \
+            else 1 if split == 'val' and num_val_im < 0 \
+            else 0
     split_mask = data_split == split_flag
 
     # Filter out images without bounding boxes
@@ -366,9 +374,9 @@ def load_graphs(roidb_file, split, num_im, num_val_im, filter_empty_rels, filter
         split_mask &= roi_h5['img_to_first_rel'][:] >= 0
 
     image_index = np.where(split_mask)[0]
-    if num_im > -1:
+    if num_im >= 0:
         image_index = image_index[:num_im]
-    if num_val_im > 0:
+    if num_val_im >= 0:
         if split == 'val':
             image_index = image_index[:num_val_im]
         elif split == 'train':

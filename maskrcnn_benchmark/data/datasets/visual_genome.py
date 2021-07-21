@@ -83,12 +83,18 @@ class VGDataset(torch.utils.data.Dataset):
             self.img_info = [self.img_info[i] for i in np.where(self.split_mask)[0]]
 
         # remove the unknown and missing classes if excluded from the data
-        classes_to_ind = {k: i for i, k in self.categories.items()}
-        for k, b in ('__unknown__', unknown), ('__missing__', missing):
-            if not b:
-                classes_to_ind.pop(k, None) # remove the key if it exists
-        self.ind_to_classes = sorted(classes_to_ind,
-                key=lambda k: classes_to_ind[k])
+        self.classes_to_ind = {k: i for i, k in self.categories.items()}
+        for n, b in ('unknown', unknown), ('missing', missing):
+            k = f'__{n}__'
+            if b: # class k is enabled
+                if k not in self.classes_to_ind:
+                    self.classes_to_ind[k] = len(self.classes_to_ind)
+                        # add the class as the last one
+            else: # class k is disabled
+                if k in self.classes_to_ind:
+                    del self.classes_to_ind[k] # remove the class
+        self.ind_to_classes = sorted(self.classes_to_ind,
+                key=lambda k: self.classes_to_ind[k])
         self.categories = {i: k for i, k in enumerate(self.ind_to_classes)}
 
 

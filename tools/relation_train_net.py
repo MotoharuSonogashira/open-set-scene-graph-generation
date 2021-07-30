@@ -217,9 +217,12 @@ def train(cfg, local_rank, distributed, logger):
     total_time_str = str(datetime.timedelta(seconds=total_training_time))
     logger.info(
         "Total training time: {} ({:.4f} s / it)".format(
-            total_time_str, total_training_time / (max_iter)
+            total_time_str, total_training_time / (max_iter if max_iter > 0 else 1)
         )
     )
+    if max_iter == 0:
+        arguments["iteration"] = -1
+        checkpointer.save("model_final", **arguments)
     return model
 
 def fix_eval_modules(eval_modules):

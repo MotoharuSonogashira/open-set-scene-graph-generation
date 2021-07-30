@@ -21,6 +21,7 @@ class PostProcessor(nn.Module):
         attribute_on,
         use_gt_box=False,
         later_nms_pred_thres=0.3,
+        unknown_threshold=None
     ):
         """
         Arguments:
@@ -30,6 +31,7 @@ class PostProcessor(nn.Module):
         self.attribute_on = attribute_on
         self.use_gt_box = use_gt_box
         self.later_nms_pred_thres = later_nms_pred_thres
+        self.unknown_threshold = unknown_threshold
 
     def forward(self, x, rel_pair_idxs, boxes):
         """
@@ -90,6 +92,12 @@ class PostProcessor(nn.Module):
                 batch_size = obj_class.shape[0]
                 regressed_box_idxs = obj_class
                 boxlist = BoxList(box.get_field('boxes_per_cls')[torch.arange(batch_size, device=device), regressed_box_idxs], box.size, 'xyxy')
+            if self.unknown_threshold is not None:
+                # detect unknown objects by score thresholding
+                inds = (obj_scores < self.unknown_threshold
+                        ).nonzero().squeeze(1)
+                obj_class[inds] = num_obj_class # unknown class
+                # score and bbox for the original class is used for each object
             boxlist.add_field('pred_labels', obj_class) # (#obj, )
             boxlist.add_field('pred_scores', obj_scores) # (#obj, )
 
@@ -125,10 +133,12 @@ def make_roi_relation_post_processor(cfg):
     attribute_on = cfg.MODEL.ATTRIBUTE_ON
     use_gt_box = cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX
     later_nms_pred_thres = cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
+    unknown_threshold = cfg.MODEL.UNKNOWN_THRESHOLD
 
     postprocessor = PostProcessor(
         attribute_on,
         use_gt_box,
         later_nms_pred_thres,
+        unknown_threshold
     )
     return postprocessor

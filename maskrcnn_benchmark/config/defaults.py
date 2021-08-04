@@ -82,9 +82,11 @@ _C.DATASETS.TEST = ()
 _C.DATASETS.NUM_IM = -1
 # Number of images in val dataset (ignored to use the input split if negative)
 _C.DATASETS.NUM_VAL_IM = 5000
-# Use the validation image set in the input dataset to the training set
-# (otherwise the validation set is merged to the training set)
-_C.DATASETS.INPUT_VAL = False
+# How to use the validation images specified in the input dataset: 'train' to
+# use them as additional images in the training set, 'val' to use them as the
+# validation set (unused if num_val_im is non-negative), 'test' to use them as
+# the testing set while ignoring the original testing set
+_C.DATASETS.INPUT_VAL = 'train'
 
 # -----------------------------------------------------------------------------
 # DataLoader

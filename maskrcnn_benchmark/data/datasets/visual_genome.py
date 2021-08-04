@@ -32,7 +32,7 @@ class VGDataset(torch.utils.data.Dataset):
                 filter_empty_rels=True, num_im=-1, num_val_im=5000,
                 filter_duplicate_rels=True, filter_non_overlap=True,
                 flip_aug=False, custom_eval=False, custom_path='',
-                input_val=False, unknown=False, missing=False):
+                input_val=None, unknown=False, missing=False):
         """
         Torch dataset for VisualGenome
         Parameters:
@@ -347,7 +347,7 @@ def load_image_filenames(img_dir, image_file):
 
 def load_graphs(roidb_file, split, num_im, num_val_im,
         filter_empty_rels, filter_non_overlap,
-        input_val=False, unknown=False, missing=False, categories={}):
+        input_val=None, unknown=False, missing=False, categories={}):
     """
     Load the file containing the GT boxes and relations, as well as the dataset split
     Parameters:
@@ -367,8 +367,16 @@ def load_graphs(roidb_file, split, num_im, num_val_im,
     """
     roi_h5 = h5py.File(roidb_file, 'r')
     data_split = roi_h5['split'][:]
-    if not input_val:
+    if input_val is None:
+        input_val = 'train' # bahavior of the original code
+    assert(input_val in {'train', 'val', 'test'})
+    if input_val == 'train':
         data_split[data_split == 1] = 0 # merge val to train
+    elif input_val == 'val':
+        pass # preserve val
+    elif input_val == 'test':
+        data_split[data_split == 2] = -1 # disable original test
+        data_split[data_split == 1] =  2 # treat val as test
     split_flag = 2 if split == 'test'                   \
             else 1 if split == 'val' and num_val_im < 0 \
             else 0

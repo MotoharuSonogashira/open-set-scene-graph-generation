@@ -272,7 +272,9 @@ def main():
     if args.distributed:
         torch.cuda.set_device(args.local_rank)
         torch.distributed.init_process_group(
-            backend="nccl", init_method="env://"
+            backend="nccl", init_method="env://",
+            **({'timeout': datetime.timedelta(0, int(os.environ['TIMEOUT']))}
+                if 'TIMEOUT' in os.environ else {})
         )
         synchronize()
 

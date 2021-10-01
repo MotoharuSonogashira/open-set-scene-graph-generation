@@ -136,7 +136,9 @@ class IMPPredictor(nn.Module):
         super(IMPPredictor, self).__init__()
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
-        self.use_bias = False
+        self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
+        if self.use_bias is None:
+            self.use_bias = False
 
         assert in_channels is not None
 
@@ -208,6 +210,9 @@ class MotifPredictor(nn.Module):
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_att_cls = config.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
+        self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
+        if self.use_bias is None:
+            self.use_bias = True
         
         assert in_channels is not None
         num_inputs = in_channels
@@ -322,6 +327,9 @@ class VCTreePredictor(nn.Module):
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_att_cls = config.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
+        self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
+        if self.use_bias is None:
+            self.use_bias = True
         
         assert in_channels is not None
         num_inputs = in_channels
@@ -362,7 +370,8 @@ class VCTreePredictor(nn.Module):
         else:
             self.union_single_not_match = False
 
-        self.freq_bias = FrequencyBias(config, statistics)
+        if self.use_bias:
+            self.freq_bias = FrequencyBias(config, statistics)
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger=None):
         """
@@ -408,10 +417,12 @@ class VCTreePredictor(nn.Module):
             union_features = self.up_dim(union_features)
 
         ctx_dists = self.ctx_compress(prod_rep * union_features)
+        rel_dists = ctx_dists
         #uni_dists = self.uni_compress(self.drop(union_features))
-        frq_dists = self.freq_bias.index_with_labels(pair_pred.long())
+        if self.use_bias:
+            frq_dists = self.freq_bias.index_with_labels(pair_pred.long())
+            rel_dists += frq_dists
 
-        rel_dists = ctx_dists + frq_dists
         #rel_dists = ctx_dists + uni_gate * uni_dists + frq_gate * frq_dists
 
         obj_dists = obj_dists.split(num_objs, dim=0)
@@ -696,8 +707,15 @@ class DummyPredictor(nn.Module):
         self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
         self.num_att_cls = config.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
         self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
+        self.use_bias = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS
+        if self.use_bias is None:
+            self.use_bias = False
 
         assert in_channels is not None
+
+        if self.use_bias:
+            statistics = get_dataset_statistics(config)
+            self.freq_bias = FrequencyBias(config, statistics)
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger=None):
         """
@@ -719,62 +737,20 @@ class DummyPredictor(nn.Module):
             # same score (0) for all classes; in practice, the first class
             # except for background (index 1) will be selected in PostProcessor
 
-        obj_dists = obj_dists.split(num_objs, dim=0)
-        rel_dists = rel_dists.split(num_rels, dim=0)
+        if self.use_bias:
+            obj_preds = obj_dists[..., 1:].max(-1)[1] + 1 # exclude bg
+            obj_preds = obj_preds.split(num_objs, dim=0)
 
-        # we use obj_preds instead of pred from obj_dists
-        # because in decoder_rnn, preds has been through a nms stage
-        add_losses = {}
+            pair_preds = []
+            for pair_idx, obj_pred in zip(rel_pair_idxs, obj_preds):
+                pair_preds.append( torch.stack((obj_pred[pair_idx[:,0]], obj_pred[pair_idx[:,1]]), dim=1) )
+            pair_pred = cat(pair_preds, dim=0)
 
-        return obj_dists, rel_dists, add_losses
-
-@registry.ROI_RELATION_PREDICTOR.register("FreqPredictor")
-class FreqPredictor(nn.Module):
-    def __init__(self, config, in_channels):
-        super().__init__()
-        self.attribute_on = config.MODEL.ATTRIBUTE_ON
-        if self.attribute_on:
-            raise NotImplementedError
-        self.num_obj_cls = config.MODEL.ROI_BOX_HEAD.NUM_CLASSES
-        self.num_att_cls = config.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
-        self.num_rel_cls = config.MODEL.ROI_RELATION_HEAD.NUM_CLASSES
-
-        assert in_channels is not None
-
-        statistics = get_dataset_statistics(config)
-        self.freq_bias = FrequencyBias(config, statistics)
-
-    def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, union_features, logger=None):
-        """
-        Returns:
-            obj_dists (list[Tensor]): logits of object label distribution
-            rel_dists (list[Tensor])
-            rel_pair_idxs (list[Tensor]): (num_rel, 2) index of subject and object
-            union_features (Tensor): (batch_num_rel, context_pooling_dim): visual union feature of each pair
-        """
-
-        num_rels = [r.shape[0] for r in rel_pair_idxs]
-        num_objs = [len(b) for b in proposals]
-        assert len(num_rels) == len(num_objs)
-
-        obj_dists = cat([proposal.get_field('predict_logits')
-                for proposal in proposals], dim=0)
-        obj_preds = obj_dists[:, 1:].max(1)[1]
-            # exclude bg as in non-IMP models (contexts) and postprocessing
-        obj_preds = obj_preds.split(num_objs, dim=0)
-
-        pair_preds = []
-        for pair_idx, obj_pred in zip(rel_pair_idxs, obj_preds):
-            pair_preds.append( torch.stack((obj_pred[pair_idx[:,0]], obj_pred[pair_idx[:,1]]), dim=1) )
-        pair_pred = cat(pair_preds, dim=0)
-
-        rel_dists = self.freq_bias.index_with_labels(pair_pred.long())
+            rel_dists += self.freq_bias.index_with_labels(pair_pred.long())
 
         obj_dists = obj_dists.split(num_objs, dim=0)
         rel_dists = rel_dists.split(num_rels, dim=0)
 
-        # we use obj_preds instead of pred from obj_dists
-        # because in decoder_rnn, preds has been through a nms stage
         add_losses = {}
 
         return obj_dists, rel_dists, add_losses

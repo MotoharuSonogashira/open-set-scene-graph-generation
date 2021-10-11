@@ -11,7 +11,7 @@ def debug_print(logger, info):
 
 def setup_logger(name, save_dir, distributed_rank, filename="log.txt"):
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(os.environ.get('LOGLEVEL', logging.DEBUG))
     # don't log results for the non-master process
     if distributed_rank > 0:
         return logger

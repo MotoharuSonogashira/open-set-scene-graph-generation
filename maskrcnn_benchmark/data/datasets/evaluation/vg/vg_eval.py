@@ -141,12 +141,12 @@ def do_vg_evaluation(
         evaluator['eval_pair_accuracy'] = eval_pair_accuracy
 
         # used for meanRecall@K
-        eval_mean_recall = SGMeanRecall(result_dict, num_rel_category, dataset.ind_to_predicates, print_detail=True)
+        eval_mean_recall = SGMeanRecall(result_dict, num_rel_category, dataset.ind_to_predicates, print_detail=False)
         eval_mean_recall.register_container(mode)
         evaluator['eval_mean_recall'] = eval_mean_recall
 
         # used for no graph constraint mean Recall@K
-        eval_ng_mean_recall = SGNGMeanRecall(result_dict, num_rel_category, dataset.ind_to_predicates, print_detail=True)
+        eval_ng_mean_recall = SGNGMeanRecall(result_dict, num_rel_category, dataset.ind_to_predicates, print_detail=False)
         eval_ng_mean_recall.register_container(mode)
         evaluator['eval_ng_mean_recall'] = eval_ng_mean_recall
 
@@ -181,7 +181,7 @@ def do_vg_evaluation(
         result_str += '=' * 100 + '\n'
 
 
-    logger.info(result_str)
+    print(result_str)
     
     if "relations" in iou_types:
         if output_folder:

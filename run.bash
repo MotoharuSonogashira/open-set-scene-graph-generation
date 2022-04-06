@@ -5,8 +5,8 @@ set -eu
 : ${DRY:=0}
 : ${GPUS:=0} # 0 means single gpu mode
 : ${TEST:=0}
-: ${OPEN:=0}
-: ${METHOD:=faster_rcnn}
+: ${OPEN:=1}
+: ${MODEL:=faster_rcnn}
 : ${THRESHOLD:=}
 if ((TEST)) && [[ -n $THRESHOLD ]]; then
     TEST_UNKNOWN=1
@@ -72,24 +72,19 @@ fi
 # method
 declare -A predictors=([dummy]=DummyPredictor [motif]=MotifPredictor [imp]=IMPPredictor [vctree]=VCTreePredictor)
 declare -A contexts=([motif]=motifs [vtranse]=vtranse [vctree]=vctree)
-method_name=${METHOD_NAME:-$METHOD}
+method_name=${METHOD_NAME:-$MODEL}
 test_method_name=${TEST_METHOD_NAME:-$method_name}
 model=
-if [[ $METHOD == faster_rcnn ]]; then
+if [[ $MODEL == faster_rcnn ]]; then
     cfg+=(MODEL.RELATION_ON False)
 else
-    if ! [[ $METHOD =~ ^([[:alnum:]_]+)?$ ]]; then
-        echo "Error: invalid method: '$METHOD'" >&2
-        exit 1
-    fi
-    train_method=${BASH_REMATCH[1]}
     freeze_freq=0
     bias=
-    if [[ $train_method == freq ]]; then # dummy model w/ freq
+    if [[ $MODEL == freq ]]; then # dummy model w/ freq
         model=dummy
         bias=1
     else
-        model=$train_method
+        model=$MODEL
     fi
 
     cfg+=(MODEL.ROI_RELATION_HEAD.PREDICTOR ${predictors[$model]})
@@ -130,7 +125,7 @@ fi
 # mode
 declare -A protocols=([predcls]="MODEL.ROI_RELATION_HEAD.USE_GT_BOX True MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL True" [sgcls]="MODEL.ROI_RELATION_HEAD.USE_GT_BOX True MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL False" [sgdet]="MODEL.ROI_RELATION_HEAD.USE_GT_BOX False MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL False")
 weight= # no weight is loaded if empty
-if [[ $METHOD == faster_rcnn ]]; then
+if [[ $MODEL == faster_rcnn ]]; then
     config=configs/e2e_relation_detector_${CONFIG}.yaml
     if ! ((TEST)); then # training
         script=tools/detector_pretrain_net.py

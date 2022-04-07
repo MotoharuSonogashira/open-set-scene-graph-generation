@@ -25,8 +25,8 @@ def load_record(filename, name=None):
 def main():
     # Parse command-line arguments.
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--precision', type=int, default=1)
-    parser.add_argument('-m', '--metrics', nargs='*')
+    parser.add_argument('-p', '--precision', type=int, default=2)
+    parser.add_argument('-m', '--metrics', nargs='*', default='R')
     parser.add_argument('-t', '--threshold')
     parser.add_argument('-T', '--best-threshold')
     parser.add_argument('-n', '--skip-na', action='store_true')

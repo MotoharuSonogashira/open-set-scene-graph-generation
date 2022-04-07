@@ -70,7 +70,7 @@ def main():
     parser.add_argument('-c', '--config-file',
             default='configs/e2e_relation_X_101_32_8_FPN_1x.yaml')
     parser.add_argument('-C', '--no-cache', dest='cache', action='store_false')
-    parser.add_argument('-O', '--output')
+    parser.add_argument('-p', '--precision', type=int, default=2)
     parser.add_argument('-N', '--num', type=int)
     parser.add_argument('path')
     args = parser.parse_args()
@@ -147,6 +147,7 @@ def main():
         save(obj_filename, obj_stats)
         save(rel_filename, rel_stats)
 
+    pd.set_option('display.float_format', f'{{:.{args.precision}f}}'.format)
     dfs = {}
     for k in obj_stats.keys():
         df = pd.concat({name: df.mean(axis=0).unstack().T
@@ -156,10 +157,10 @@ def main():
         print(df)
         dfs[k] = df
 
-    if args.output:
-        os.makedirs(args.output, exist_ok=True)
-        for k, df in dfs.items():
-            df.to_pickle(os.path.join(args.output, f'{k}.pkl'))
+    output = os.path.join(args.path, 'eval')
+    os.makedirs(output, exist_ok=True)
+    for k, df in dfs.items():
+        df.to_pickle(os.path.join(output, f'{k}.pkl'))
 
 if __name__ == '__main__':
     main()

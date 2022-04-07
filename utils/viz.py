@@ -8,9 +8,9 @@ from tqdm import tqdm
 
 from utils import load, analyze_method_dir, load_dataset, load_eval_results
 
-sys.path.append('../imp/lib') # needed by imp.lib.fast_rcnn.visualize
+sys.path.append('open-set-scene-graph-dataset/lib') # needed by lib.fast_rcnn.visualize
 from fast_rcnn.config import cfg as imp_cfg
-    # 'imp.lib' is omitted as it prevents referencing in imp.lib.datasets.viz
+    # 'lib' is omitted as it prevents referencing in lib.datasets.viz
 from datasets.eval_utils import ground_predictions
 from datasets.viz import draw_graph, _viz_scene_graph
 
@@ -239,7 +239,7 @@ def int_tuple_2(s):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-g', '--ground', action='store_true',
+    parser.add_argument('--no-ground', dest='ground', action='store_false',
             help='use ground truth graph to limit shown objects & relations')
     parser.add_argument('-G', '--truth', action='store_true',
             help='plot ground truth instead of predictions')
